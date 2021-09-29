@@ -7,19 +7,25 @@ use core::{
     marker::PhantomData,
     mem::{self, MaybeUninit},
     ops::{Deref, DerefMut},
-    ptr,
+    ptr::{self, NonNull},
 };
 
 use super::{Init, Node, Uninit};
 
+pub mod arc;
+
 /// Instantiates a pool as a global singleton
 // NOTE(any(test)) makes testing easier (no need to enable Cargo features for testing)
 #[cfg(any(
+    armv6m,
     armv7a,
     armv7r,
     armv7m,
     armv8m_main,
-    all(target_arch = "x86_64", feature = "x86-sync-pool"),
+    all(
+        any(target_arch = "x86_64", target_arch = "x86"),
+        feature = "x86-sync-pool"
+    ),
     test
 ))]
 #[macro_export]
@@ -104,8 +110,14 @@ where
 
         mem::forget(self);
 
-        unsafe {
-            ptr::write(node.as_ref().data.get(), val);
+        if mem::size_of::<P::Data>() == 0 {
+            // no memory operation needed for ZST
+            // BUT we want to avoid calling `val`s destructor
+            mem::forget(val)
+        } else {
+            unsafe {
+                ptr::write(node.as_ref().data.get(), val);
+            }
         }
 
         Box {
@@ -162,7 +174,11 @@ where
         let node = self.inner.node;
 
         mem::forget(self);
-        mem::forget(unsafe { ptr::read(node.as_ref().data.get()) });
+        if mem::size_of::<P::Data>() == 0 {
+            // no need to do a pointer dereference in this case
+        } else {
+            mem::forget(unsafe { ptr::read(node.as_ref().data.get()) });
+        }
 
         Box {
             inner: super::Box {
@@ -223,8 +239,14 @@ where
 {
     fn drop(&mut self) {
         if TypeId::of::<S>() == TypeId::of::<Init>() {
+            let p = if mem::size_of::<P::Data>() == 0 {
+                // any pointer will do to invoke the destructor of a ZST
+                NonNull::dangling().as_ptr()
+            } else {
+                unsafe { self.inner.node.as_ref().data.get() }
+            };
             unsafe {
-                ptr::drop_in_place(self.inner.node.as_ref().data.get());
+                ptr::drop_in_place(p);
             }
         }
 
@@ -349,6 +371,25 @@ mod tests {
 
         // should be possible to allocate again
         assert_eq!(*A::alloc().unwrap().init(1), 1);
+    }
+
+    #[test]
+    fn boxed_zst_is_well_aligned() {
+        #[repr(align(2))]
+        pub struct Zst2;
+
+        pool!(A: Zst2);
+
+        let x = A::alloc().unwrap().init(Zst2);
+        assert_eq!(0, &*x as *const Zst2 as usize % 2);
+
+        #[repr(align(4096))]
+        pub struct Zst4096;
+
+        pool!(B: Zst4096);
+
+        let x = B::alloc().unwrap().init(Zst4096);
+        assert_eq!(0, &*x as *const Zst4096 as usize % 4096);
     }
 
     #[test]

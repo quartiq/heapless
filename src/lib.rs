@@ -43,6 +43,7 @@
 //!
 //! List of currently implemented data structures:
 //!
+//! - [`Arc`](pool/singleton/arc/struct.Arc.html) -- Thread-safe reference-counting pointer backed by a memory pool
 //! - [`BinaryHeap`](binary_heap/struct.BinaryHeap.html) -- priority queue
 //! - [`IndexMap`](struct.IndexMap.html) -- hash table
 //! - [`IndexSet`](struct.IndexSet.html) -- hash set
@@ -74,14 +75,17 @@
 #![deny(const_err)]
 
 pub use binary_heap::BinaryHeap;
+pub use deque::Deque;
 pub use histbuf::HistoryBuffer;
 pub use indexmap::{Bucket, FnvIndexMap, IndexMap, Pos};
 pub use indexset::{FnvIndexSet, IndexSet};
 pub use linear_map::LinearMap;
+#[cfg(all(has_cas, feature = "cas"))]
+pub use pool::singleton::arc::Arc;
 pub use string::String;
 pub use vec::Vec;
 
-// NOTE this code was last ported from v0.4.1 of the indexmap crate
+mod deque;
 mod histbuf;
 mod indexmap;
 mod indexset;
@@ -101,6 +105,7 @@ mod defmt;
 pub mod mpmc;
 #[cfg(all(has_cas, feature = "cas"))]
 pub mod pool;
+pub mod sorted_linked_list;
 #[cfg(has_atomics)]
 pub mod spsc;
 

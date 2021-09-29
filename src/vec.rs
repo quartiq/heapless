@@ -1,4 +1,4 @@
-use core::{fmt, hash, iter::FromIterator, mem::MaybeUninit, ops, ptr, slice};
+use core::{cmp::Ordering, fmt, hash, iter::FromIterator, mem::MaybeUninit, ops, ptr, slice};
 use hash32;
 
 /// A fixed capacity [`Vec`](https://doc.rust-lang.org/std/vec/struct.Vec.html)
@@ -236,8 +236,8 @@ impl<T, const N: usize> Vec<T, N> {
     /// # Safety
     ///
     /// This assumes the vec to have at least one element.
-    pub(crate) unsafe fn pop_unchecked(&mut self) -> T {
-        debug_assert!(!self.as_slice().is_empty());
+    pub unsafe fn pop_unchecked(&mut self) -> T {
+        debug_assert!(!self.is_empty());
 
         self.len -= 1;
         (self.buffer.get_unchecked_mut(self.len).as_ptr() as *const T).read()
@@ -479,6 +479,12 @@ impl<T, const N: usize> Vec<T, N> {
     #[inline]
     pub fn is_full(&self) -> bool {
         self.len == self.capacity()
+    }
+
+    /// Returns true if the vec is empty
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Returns `true` if `needle` is a prefix of the Vec.
@@ -764,6 +770,25 @@ where
 // Implements Eq if underlying data is Eq
 impl<T, const N: usize> Eq for Vec<T, N> where T: Eq {}
 
+impl<T, const N1: usize, const N2: usize> PartialOrd<Vec<T, N2>> for Vec<T, N1>
+where
+    T: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Vec<T, N2>) -> Option<Ordering> {
+        PartialOrd::partial_cmp(&**self, &**other)
+    }
+}
+
+impl<T, const N: usize> Ord for Vec<T, N>
+where
+    T: Ord,
+{
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        Ord::cmp(&**self, &**other)
+    }
+}
+
 impl<T, const N: usize> ops::Deref for Vec<T, N> {
     type Target = [T];
 
@@ -827,7 +852,31 @@ mod tests {
 
     #[test]
     fn stack_new() {
-        static mut _V: Vec<i32, 4> = Vec::new();
+        let mut _v: Vec<i32, 4> = Vec::new();
+    }
+
+    #[test]
+    fn is_full_empty() {
+        let mut v: Vec<i32, 4> = Vec::new();
+
+        assert!(v.is_empty());
+        assert!(!v.is_full());
+
+        v.push(1).unwrap();
+        assert!(!v.is_empty());
+        assert!(!v.is_full());
+
+        v.push(1).unwrap();
+        assert!(!v.is_empty());
+        assert!(!v.is_full());
+
+        v.push(1).unwrap();
+        assert!(!v.is_empty());
+        assert!(!v.is_full());
+
+        v.push(1).unwrap();
+        assert!(!v.is_empty());
+        assert!(v.is_full());
     }
 
     macro_rules! droppable {
@@ -886,6 +935,32 @@ mod tests {
         ys.push(1).unwrap();
 
         assert_eq!(xs, ys);
+    }
+
+    #[test]
+    fn cmp() {
+        let mut xs: Vec<i32, 4> = Vec::new();
+        let mut ys: Vec<i32, 4> = Vec::new();
+
+        assert_eq!(xs, ys);
+
+        xs.push(1).unwrap();
+        ys.push(2).unwrap();
+
+        assert!(xs < ys);
+    }
+
+    #[test]
+    fn cmp_heterogenous_size() {
+        let mut xs: Vec<i32, 4> = Vec::new();
+        let mut ys: Vec<i32, 8> = Vec::new();
+
+        assert_eq!(xs, ys);
+
+        xs.push(1).unwrap();
+        ys.push(2).unwrap();
+
+        assert!(xs < ys);
     }
 
     #[test]

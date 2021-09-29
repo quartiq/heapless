@@ -94,7 +94,7 @@ use core::{
 
 /// A statically allocated single producer single consumer queue with a capacity of `N - 1` elements
 ///
-/// *IMPORTANT*: To get better performance use a capacity that is a power of 2 (e.g. `16`, `32`,
+/// *IMPORTANT*: To get better performance use a value for `N` that is a power of 2 (e.g. `16`, `32`,
 /// etc.).
 pub struct Queue<T, const N: usize> {
     // this is from where we dequeue items
@@ -297,6 +297,12 @@ impl<T, const N: usize> Queue<T, N> {
     }
 }
 
+impl<T, const N: usize> Default for Queue<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T, const N: usize> Clone for Queue<T, N>
 where
     T: Clone,
@@ -306,7 +312,7 @@ where
 
         for s in self.iter() {
             unsafe {
-                // NOTE(unsafe) new.capacity() == self.capacity() <= self.len()
+                // NOTE(unsafe) new.capacity() == self.capacity() >= self.len()
                 // no overflow possible
                 new.enqueue_unchecked(s.clone());
             }
@@ -615,6 +621,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // too slow
     fn len() {
         let mut rb: Queue<i32, 3> = Queue::new();
 
@@ -635,6 +642,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // too slow
     fn try_overflow() {
         const N: usize = 23;
         let mut rb: Queue<i32, N> = Queue::new();
